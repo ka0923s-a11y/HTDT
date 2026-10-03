@@ -1365,6 +1365,13 @@ def _load_roomplan_capture_metadata(
         raise CaptureIngestionContractError(
             f"{field}.raw_sha256 conflicts with the manifest"
         )
+    if (
+        "raw_byte_count" in document
+        and document["raw_byte_count"] != declared[raw_payload_path]["bytes"]
+    ):
+        raise CaptureIngestionContractError(
+            f"{field}.raw_byte_count conflicts with the manifest"
+        )
 
     processed_payload_path = document.get("processed_payload_path")
     processed_sha256 = document.get("processed_sha256")
@@ -1396,6 +1403,13 @@ def _load_roomplan_capture_metadata(
         ):
             raise CaptureIngestionContractError(
                 f"{field}.processed_sha256 conflicts with the manifest"
+            )
+        if (
+            "processed_byte_count" in document
+            and document["processed_byte_count"] != declared[processed_payload_path]["bytes"]
+        ):
+            raise CaptureIngestionContractError(
+                f"{field}.processed_byte_count conflicts with the manifest"
             )
 
     for key in ("surface_count", "object_count"):

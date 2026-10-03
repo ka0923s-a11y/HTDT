@@ -17,10 +17,18 @@ own test harness, so a digest change means the emit side changed.
 from __future__ import annotations
 
 import hashlib
+import json
+import shutil
 from pathlib import Path
 
+import pytest
+
 from htdt.capture_bundle import FrozenBundle
-from htdt.capture_reference import build_ingestion_plan, canonical_plan_bytes
+from htdt.capture_reference import (
+    CaptureIngestionContractError,
+    build_ingestion_plan,
+    canonical_plan_bytes,
+)
 
 FIXTURE_ROOT = (
     Path(__file__).resolve().parent / 'fixtures' / 'capture' / 'swift-maximal'
@@ -97,3 +105,26 @@ def test_swift_authored_derived_entries_carry_source_refs() -> None:
         assert entry['source_refs'], (
             f"{entry['path']}: derived entry without source_refs"
         )
+
+
+@pytest.mark.parametrize('field', ['raw_byte_count', 'processed_byte_count'])
+def test_roomplan_metadata_byte_counts_match_manifest(tmp_path: Path, field: str) -> None:
+    bundle = tmp_path / 'bundle'
+    shutil.copytree(FIXTURE_ROOT, bundle)
+    relative = 'roomplan/captured-room-metadata.json'
+    metadata_path = bundle / relative
+    metadata = json.loads(metadata_path.read_bytes())
+    metadata[field] += 1
+    payload = json.dumps(metadata, sort_keys=True, separators=(',', ':')).encode()
+    metadata_path.write_bytes(payload)
+    manifest_path = bundle / 'manifest.json'
+    manifest = json.loads(manifest_path.read_bytes())
+    entry = next(row for row in manifest['files'] if row['path'] == relative)
+    entry.update(bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+    manifest_path.write_bytes(
+        json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+    )
+    frozen = FrozenBundle(bundle)
+    assert frozen.report['valid'] is True
+    with pytest.raises(CaptureIngestionContractError, match=f'{field} conflicts with the manifest'):
+        build_ingestion_plan(frozen)
